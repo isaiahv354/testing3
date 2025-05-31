@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paint 3D Mobile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FontLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/geometries/TextGeometry.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden; /* Prevent scrolling */
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        /* Custom styles for better button appearance */
+        .tool-button {
+            @apply bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-200 ease-in-out;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
+            border: none;
+        }
+        .tool-button.active {
+            @apply bg-blue-700;
+        }
+        .color-input {
+            @apply w-10 h-10 rounded-lg border-2 border-gray-300 cursor-pointer;
+        }
+        .panel {
+            @apply bg-white p-4 rounded-lg shadow-xl;
+        }
+        /* Style for the message box */
+        #messageBox {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #333;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            display: none; /* Hidden by default */
+            text-align: center;
+            font-size: 1.1rem;
+        }
+        /* Style for custom modal */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1001;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            width: 80%;
+            max-width: 400px;
+            text-align: center;
+        }
+        .modal-content input[type="text"] {
+            @apply w-full p-2 mb-4 border border-gray-300 rounded-md;
+        }
+        .modal-content button {
+            @apply bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg;
+        }
+        /* Styles for property inputs */
+        .property-group {
+            @apply mb-4 p-3 bg-gray-100 rounded-md;
+        }
+        .property-group label {
+            @apply block text-sm font-medium text-gray-700 mb-1;
+        }
+        .property-group input[type="number"] {
+            @apply w-full p-2 border border-gray-300 rounded-md;
+        }
+        .property-group select {
+            @apply w-full p-2 border border-gray-300 rounded-md;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col h-screen">
+    <div id="messageBox" class="hidden"></div>
+
+    <div id="textModal" class="modal hidden">
+        <div class="modal-content">
+            <h3 class="text-lg font-semibold mb-4">Enter 3D Text</h3>
+            <input type="text" id="textInput" placeholder="Your text here..." maxlength="50">
+            <div class="flex flex-wrap justify-around mb-4">
+                <label class="inline-flex items-center m-1">
+                    <input type="checkbox" id="textBold" class="form-checkbox h-5 w-5 text-blue-600">
+                    <span class="ml-2 text-gray-700">Bold</span>
+                </label>
+                <label class="inline-flex items-center m-1">
+                    <input type="checkbox" id="textItalic" class="form-checkbox h-5 w-5 text-blue-600">
+                    <span class="ml-2 text-gray-700">Italic (Visual)</span>
+                </label>
+                <label class="inline-flex items-center m-1">
+                    <input type="checkbox" id="textUnderline" class="form-checkbox h-5 w-5 text-blue-600">
+                    <span class="ml-2 text-gray-700">Underline</span>
+                </label>
+                <label class="inline-flex items-center m-1">
+                    <input type="checkbox" id="textStrike" class="form-checkbox h-5 w-5 text-blue-600">
+                    <span class="ml-2 text-gray-700">Strike</span>
+                </label>
+            </div>
+            <button id="addTextConfirm">Add Text</button>
+            <button id="cancelText" class="ml-2 bg-gray-400 hover:bg-gray-500">Cancel</button>
+        </div>
+    </div>
+
+    <header class="bg-white shadow-md p-4 flex justify-center items-center">
+        <h1 class="text-2xl font-bold text-gray-800">Paint 3D Mobile</h1>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+        <div class="w-1/4 bg-gray-200 p-4 flex flex-col space-y-4 overflow-y-auto panel">
+            <h2 class="text-lg font-semibold text-gray-700 mb-2">Tools</h2>
+            <button id="brushTool" class="tool-button active">Brush</button>
+            <button id="addCube" class="tool-button">Add Cube</button>
+            <button id="addSphere" class="tool-button">Add Sphere</button>
+            <button id="addText" class="tool-button">Add 3D Text</button>
+            <button id="loadModel" class="tool-button bg-purple-500 hover:bg-purple-600">Load 3D Model</button>
+            <input type="file" id="modelFileInput" accept=".glb" class="hidden">
+            <button id="selectTool" class="tool-button bg-green-500 hover:bg-green-600">Select Object</button>
+            <button id="clearCanvas" class="tool-button bg-red-500 hover:bg-red-600">Clear Scene</button>
+
+            <h2 class="text-lg font-semibold text-gray-700 mt-4 mb-2">History</h2>
+            <button id="undoButton" class="tool-button bg-gray-500 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed" disabled>Undo</button>
+            <button id="redoButton" class="tool-button bg-gray-500 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed" disabled>Redo</button>
+
+            <h2 class="text-lg font-semibold text-gray-700 mt-4 mb-2">Brush Properties</h2>
+            <label for="brushThickness" class="text-sm text-gray-700">Thickness:</label>
+            <input type="range" id="brushThickness" min="1" max="50" value="10" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+            <span id="thicknessValue" class="text-sm text-gray-600">10px</span>
+
+            <label for="brushOpacity" class="text-sm text-gray-700">Opacity:</label>
+            <input type="range" id="brushOpacity" min="0" max="100" value="100" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+            <span id="opacityValue" class="text-sm text-gray-600">100%</span>
+
+            <h2 class="text-lg font-semibold text-gray-700 mt-4 mb-2">Color</h2>
+            <input type="color" id="colorPicker" value="#000000" class="color-input">
+        </div>
+
+        <div id="canvas-container" class="flex-1 relative bg-gray-300 flex justify-center items-center">
+            <canvas id="three-canvas"></canvas>
+            <canvas id="drawing-canvas" class="absolute top-0 left-0" style="pointer-events: none;"></canvas>
+        </div>
+
+        <div id="propertiesPanel" class="w-1/4 bg-gray-200 p-4 flex flex-col space-y-4 overflow-y-auto panel">
+            <h2 class="text-lg font-semibold text-gray-700 mb-2">Properties</h2>
+            <p class="text-gray-600 text-sm" id="propertiesMessage">Select an object to edit its properties.</p>
+            <div id="objectProperties" class="hidden">
+                <div class="property-group">
+                    <label>Position (X, Y, Z):</label>
+                    <input type="number" id="propPosX" step="0.1" class="mb-2">
+                    <input type="number" id="propPosY" step="0.1" class="mb-2">
+                    <input type="number" id="propPosZ" step="0.1">
+                </div>
+                <div class="property-group">
+                    <label>Rotation (X, Y, Z - Radians):</label>
+                    <input type="number" id="propRotX" step="0.1" class="mb-2">
+                    <input type="number" id="propRotY" step="0.1" class="mb-2">
+                    <input type="number" id="propRotZ" step="0.1">
+                </div>
+                <div class="property-group">
+                    <label>Scale (X, Y, Z):</label>
+                    <input type="number" id="propScaleX" step="0.1" min="0.1" class="mb-2">
+                    <input type="number" id="propScaleY" step="0.1" min="0.1" class="mb-2">
+                    <input type="number" id="propScaleZ" step="0.1" min="0.1">
+                </div>
+                <div class="property-group">
+                    <label>Color:</label>
+                    <input type="color" id="propColor" class="w-full h-10">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        console.log("JavaScript is running!"); // Early log to confirm script execution
+
+        // Global variables for Three.js scene
+        let scene, camera, renderer, controls, transformControls;
+        let drawingCanvas, drawingContext;
+        let planeMesh, planeTexture, planeMaterial;
+        let currentDrawingColor = '#000000';
+        let currentBrushThickness = 10; // Default thickness
+        let currentBrushOpacity = 1.0; // Default opacity (0.0 to 1.0)
+        let isDrawing = false;
+        let mouse = new THREE.Vector2();
+        let raycaster = new THREE.Raycaster();
+        let currentTool = 'brush'; // 'brush', 'addCube', 'addSphere', 'addText', 'select'
+        let regularFont, boldFont; // Variables to hold the loaded 3D fonts
+        let selectedObject = null; // Currently selected 3D object for manipulation
+
+        // Array to store 3D objects added to the scene (excluding the planeMesh)
+        const objectsInScene = [];
+
+        // --- Undo/Redo History ---
+        let undoStack = [];
+        let redoStack = [];
+        let isPerformingUndoRedo = false; // Flag to prevent new commands during undo/redo
+
+        // --- Command Classes ---
+        class Command {
+            execute() { throw new Error("Execute method must be implemented"); }
+            undo() { throw new Error("Undo method must be implemented"); }
+        }
+
+        class AddObjectCommand extends Command {
+            constructor(object) {
+                super();
+                this.object = object;
+            }
+            execute() {
+                scene.add(this.object);
+                objectsInScene.push(this.object);
+                deselectObject();
+            }
+            undo() {
+                scene.remove(this.object);
+                const index = objectsInScene.indexOf(this.object);
+                if (index > -1) {
+                    objectsInScene.splice(index, 1);
+                }
+                deselectObject();
+            }
+        }
+
+        class RemoveObjectCommand extends Command {
+            constructor(object) {
+                super();
+                this.object = object;
+                this.position = object.position.clone();
+                this.rotation = object.rotation.clone();
+                this.scale = object.scale.clone();
+                this.parent = object.parent; // Store parent to re-add correctly
+            }
+            execute() {
+                this.parent.remove(this.object); // Remove from its parent
+                const index = objectsInScene.indexOf(this.object);
+                if (index > -1) {
+                    objectsInScene.splice(index, 1);
+                }
+                deselectObject();
+            }
+            undo() {
+                this.parent.add(this.object); // Re-add to its parent
+                objectsInScene.push(this.object);
+                this.object.position.copy(this.position);
+                this.object.rotation.copy(this.rotation);
+                this.object.scale.copy(this.scale);
+                deselectObject();
+            }
+        }
+
+        class TransformObjectCommand extends Command {
+            constructor(object, oldPosition, oldRotation, oldScale, oldColor, newPosition, newRotation, newScale, newColor) {
+                super();
+                this.object = object;
+                this.oldPosition = oldPosition;
+                this.oldRotation = oldRotation;
+                this.oldScale = oldScale;
+                this.oldColor = oldColor;
+                this.newPosition = newPosition;
+                this.newRotation = newRotation;
+                this.newScale = newScale;
+                this.newColor = newColor;
+            }
+            execute() {
+                this.object.position.copy(this.newPosition);
+                this.object.rotation.copy(this.newRotation);
+                this.object.scale.copy(this.newScale);
+                if (this.object.material && this.object.material.color) {
+                    this.object.material.color.set(this.newColor);
+                }
+                updatePropertiesPanel(this.object);
+            }
+            undo() {
+                this.object.position.copy(this.oldPosition);
+                this.object.rotation.copy(this.oldRotation);
+                this.object.scale.copy(this.oldScale);
+                if (this.object.material && this.object.material.color) {
+                    this.object.material.color.set(this.oldColor);
+                }
+                updatePropertiesPanel(this.object);
+            }
+        }
+
+        class ClearSceneCommand extends Command {
+            constructor(objectsRemoved, oldDrawingDataURL) {
+                super();
+                this.objectsRemoved = objectsRemoved; // Array of {object, position, rotation, scale, parent}
+                this.oldDrawingDataURL = oldDrawingDataURL;
+            }
+            execute() {
+                for (const { object } of this.objectsRemoved) {
+                    object.parent.remove(object);
+                    const index = objectsInScene.indexOf(object);
+                    if (index > -1) objectsInScene.splice(index, 1);
+                }
+                drawingContext.fillStyle = 'white';
+                drawingContext.fillRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+                planeTexture.needsUpdate = true;
+                deselectObject();
+            }
+            undo() {
+                for (const { object, position, rotation, scale, parent } of this.objectsRemoved) {
+                    parent.add(object);
+                    objectsInScene.push(object);
+                    object.position.copy(position);
+                    object.rotation.copy(rotation);
+                    object.scale.copy(scale);
+                }
+                const img = new Image();
+                img.onload = () => {
+                    drawingContext.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+                    drawingContext.drawImage(img, 0, 0);
+                    planeTexture.needsUpdate = true;
+                };
+                img.src = this.oldDrawingDataURL;
+                deselectObject();
+            }
+        }
+
+        /**
+         * Pushes a command to the undo stack and clears the redo stack.
+         * @param {Command} command - The command to push.
+         */
+        function pushCommand(command) {
+            if (isPerformingUndoRedo) return; // Don't record commands during undo/redo operations
+            undoStack.push(command);
+            redoStack = []; // Clear redo stack on new action
+            updateUndoRedoButtons();
+            console.log("Command pushed:", command);
+        }
+
+        /**
+         * Executes the last undo command.
+         */
+        function executeUndo() {
+            if (undoStack.length === 0) return;
+            isPerformingUndoRedo = true;
+            const command = undoStack.pop();
+            command.undo();
+            redoStack.push(command);
+            isPerformingUndoRedo = false;
+            updateUndoRedoButtons();
+            showMessageBox('Undo successful!', 800);
+            console.log("Undo executed. Undo stack size:", undoStack.length, "Redo stack size:", redoStack.length);
+        }
+
+        /**
+         * Executes the last redo command.
+         */
+        function executeRedo() {
+            if (redoStack.length === 0) return;
+            isPerformingUndoRedo = true;
+            const command = redoStack.pop();
+            command.execute();
+            undoStack.push(command);
+            isPerformingUndoRedo = false;
+            updateUndoRedoButtons();
+            showMessageBox('Redo successful!', 800);
+            console.log("Redo executed. Undo stack size:", undoStack.length, "Redo stack size:", redoStack.length);
+        }
+
+        /**
+         * Updates the disabled state of the Undo/Redo buttons.
+         */
+        function updateUndoRedoButtons() {
+            document.getElementById('undoButton').disabled = undoStack.length === 0;
+            document.getElementById('redoButton').disabled = redoStack.length === 0;
+        }
+
+        // --- Utility Functions ---
+
+        /**
+         * Displays a message box with the given text for a specified duration.
+         * @param {string} message - The message to display.
+         * @param {number} duration - The duration in milliseconds to display the message.
+         */
+        function showMessageBox(message, duration = 2000) {
+            const messageBox = document.getElementById('messageBox');
+            messageBox.textContent = message;
+            messageBox.style.display = 'block';
+            setTimeout(() => {
+                messageBox.style.display = 'none';
+            }, duration);
+        }
+
+        /**
+         * Converts a hex color string to an RGBA string with the given opacity.
+         * @param {string} hex - The hex color string (e.g., "#RRGGBB").
+         * @param {number} alpha - The opacity value (0.0 to 1.0).
+         * @returns {string} The RGBA color string (e.g., "rgba(R, G, B, A)").
+         */
+        function hexToRgba(hex, alpha) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        /**
+         * Updates the properties panel with the selected object's details.
+         * @param {THREE.Object3D|null} object - The object to display properties for, or null to clear.
+         */
+        function updatePropertiesPanel(object) {
+            const propertiesMessage = document.getElementById('propertiesMessage');
+            const objectPropertiesDiv = document.getElementById('objectProperties');
+
+            if (object && object !== planeMesh) {
+                propertiesMessage.classList.add('hidden');
+                objectPropertiesDiv.classList.remove('hidden');
+
+                document.getElementById('propPosX').value = object.position.x.toFixed(2);
+                document.getElementById('propPosY').value = object.position.y.toFixed(2);
+                document.getElementById('propPosZ').value = object.position.z.toFixed(2);
+
+                document.getElementById('propRotX').value = object.rotation.x.toFixed(2);
+                document.getElementById('propRotY').value = object.rotation.y.toFixed(2);
+                document.getElementById('propRotZ').value = object.rotation.z.toFixed(2);
+
+                document.getElementById('propScaleX').value = object.scale.x.toFixed(2);
+                document.getElementById('propScaleY').value = object.scale.y.toFixed(2);
+                document.getElementById('propScaleZ').value = object.scale.z.toFixed(2);
+
+                // Assuming material has a color property
+                if (object.material && object.material.color) {
+                    document.getElementById('propColor').value = '#' + object.material.color.getHexString();
+                } else {
+                    document.getElementById('propColor').value = '#000000'; // Default if no color
+                }
+            } else {
+                propertiesMessage.classList.remove('hidden');
+                objectPropertiesDiv.classList.add('hidden');
+            }
+        }
+
+        let initialTransformState = {}; // Store state when selection starts
+
+        /**
+         * Attaches event listeners to property inputs to update the selected object.
+         */
+        function setupPropertyListeners() {
+            const propPosX = document.getElementById('propPosX');
+            const propPosY = document.getElementById('propPosY');
+            const propPosZ = document.getElementById('propPosZ');
+            const propRotX = document.getElementById('propRotX');
+            const propRotY = document.getElementById('propRotY');
+            const propRotZ = document.getElementById('propRotZ');
+            const propScaleX = document.getElementById('propScaleX');
+            const propScaleY = document.getElementById('propScaleY');
+            const propScaleZ = document.getElementById('propScaleZ');
+            const propColor = document.getElementById('propColor');
+
+            const recordTransformCommand = () => {
+                if (selectedObject && !isPerformingUndoRedo) {
+                    const newPosition = selectedObject.position.clone();
+                    const newRotation = selectedObject.rotation.clone();
+                    const newScale = selectedObject.scale.clone();
+                    const newColor = selectedObject.material && selectedObject.material.color ? selectedObject.material.color.getHex() : null;
+
+                    // Only push command if state has actually changed
+                    if (!initialTransformState.position.equals(newPosition) ||
+                        !initialTransformState.rotation.equals(newRotation) ||
+                        !initialTransformState.scale.equals(newScale) ||
+                        initialTransformState.color !== newColor) {
+                        pushCommand(new TransformObjectCommand(
+                            selectedObject,
+                            initialTransformState.position,
+                            initialTransformState.rotation,
+                            initialTransformState.scale,
+                            initialTransformState.color,
+                            newPosition,
+                            newRotation,
+                            newScale,
+                            newColor
+                        ));
+                        // Update initial state for subsequent changes
+                        initialTransformState = {
+                            position: newPosition,
+                            rotation: newRotation,
+                            scale: newScale,
+                            color: newColor
+                        };
+                    }
+                }
+            };
+
+            // Debounce for input fields to avoid too many commands
+            let debounceTimeout;
+            const debouncedRecord = () => {
+                clearTimeout(debounceTimeout);
+                debounceTimeout = setTimeout(recordTransformCommand, 300); // Record after 300ms of no input
+            };
+
+
+            propPosX.addEventListener('input', (e) => { if (selectedObject) { selectedObject.position.x = parseFloat(e.target.value); debouncedRecord(); } });
+            propPosY.addEventListener('input', (e) => { if (selectedObject) { selectedObject.position.y = parseFloat(e.target.value); debouncedRecord(); } });
+            propPosZ.addEventListener('input', (e) => { if (selectedObject) { selectedObject.position.z = parseFloat(e.target.value); debouncedRecord(); } });
+
+            propRotX.addEventListener('input', (e) => { if (selectedObject) { selectedObject.rotation.x = parseFloat(e.target.value); debouncedRecord(); } });
+            propRotY.addEventListener('input', (e) => { if (selectedObject) { selectedObject.rotation.y = parseFloat(e.target.value); debouncedRecord(); } });
+            propRotZ.addEventListener('input', (e) => { if (selectedObject) { selectedObject.rotation.z = parseFloat(e.target.value); debouncedRecord(); } });
+
+            propScaleX.addEventListener('input', (e) => { if (selectedObject) { selectedObject.scale.x = parseFloat(e.target.value); debouncedRecord(); } });
+            propScaleY.addEventListener('input', (e) => { if (selectedObject) { selectedObject.scale.y = parseFloat(e.target.value); debouncedRecord(); } });
+            propScaleZ.addEventListener('input', (e) => { if (selectedObject) { selectedObject.scale.z = parseFloat(e.target.value); debouncedRecord(); } });
+
+            propColor.addEventListener('input', (e) => {
+                if (selectedObject && selectedObject.material && selectedObject.material.color) {
+                    selectedObject.material.color.set(e.target.value);
+                    debouncedRecord();
+                }
+            });
+        }
+
+
+        // --- Three.js Setup ---
+
+        /**
+         * Initializes the Three.js scene, camera, renderer, and controls.
+         */
+        function initThreeJS() {
+            const canvasContainer = document.getElementById('canvas-container');
+            const threeCanvas = document.getElementById('three-canvas');
+
+            // 1. Scene: The container for all 3D objects, lights, and cameras.
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f0f0); // Light gray background
+
+            // 2. Camera: Defines the view into the scene.
+            // PerspectiveCamera(fov, aspect, near, far)
+            camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 1000);
+            // Adjust camera position for front-facing plane
+            camera.position.set(0, 0, 10);
+
+            // 3. Renderer: Renders the scene onto the canvas.
+            renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, antialias: true });
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio); // For sharper rendering on high-DPI screens
+
+            // 4. OrbitControls: Allows interactive camera manipulation (pan, zoom, orbit).
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; // Smooth camera movement
+            controls.dampingFactor = 0.25;
+            controls.screenSpacePanning = false; // Prevents camera from going below the ground
+
+            // 5. TransformControls: For moving, rotating, scaling selected objects.
+            transformControls = new THREE.TransformControls(camera, renderer.domElement);
+            scene.add(transformControls);
+
+            // Event listeners for TransformControls to manage OrbitControls and record commands
+            transformControls.addEventListener('dragging-changed', function (event) {
+                controls.enabled = !event.value; // Disable OrbitControls when TransformControls is active
+                if (!event.value && selectedObject && !isPerformingUndoRedo) { // Dragging stopped
+                    const newPosition = selectedObject.position.clone();
+                    const newRotation = selectedObject.rotation.clone();
+                    const newScale = selectedObject.scale.clone();
+                    const newColor = selectedObject.material && selectedObject.material.color ? selectedObject.material.color.getHex() : null;
+
+                    // Only push command if state has actually changed
+                    if (!initialTransformState.position.equals(newPosition) ||
+                        !initialTransformState.rotation.equals(newRotation) ||
+                        !initialTransformState.scale.equals(newScale) ||
+                        initialTransformState.color !== newColor) {
+                        pushCommand(new TransformObjectCommand(
+                            selectedObject,
+                            initialTransformState.position,
+                            initialTransformState.rotation,
+                            initialTransformState.scale,
+                            initialTransformState.color,
+                            newPosition,
+                            newRotation,
+                            newScale,
+                            newColor
+                        ));
+                    }
+                } else if (event.value && selectedObject) { // Dragging started
+                    initialTransformState = {
+                        position: selectedObject.position.clone(),
+                        rotation: selectedObject.rotation.clone(),
+                        scale: selectedObject.scale.clone(),
+                        color: selectedObject.material && selectedObject.material.color ? selectedObject.material.color.getHex() : null
+                    };
+                }
+            });
+            transformControls.addEventListener('change', function () {
+                if (selectedObject) {
+                    updatePropertiesPanel(selectedObject); // Update panel when object is moved by gizmo
+                }
+            });
+
+
+            // Add ambient light to illuminate all objects equally
+            const ambientLight = new THREE.AmbientLight(0x404040); // Soft white light
+            scene.add(ambientLight);
+
+            // Add directional light for shadows and definition
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.7);
+            directionalLight.position.set(5, 10, 7.5).normalize();
+            scene.add(directionalLight);
+
+            // --- Drawing Plane Setup (Front-facing) ---
+            // This plane will act as the base for 2D drawing, which will then be applied as a texture.
+            const planeGeometry = new THREE.PlaneGeometry(10, 10); // A 10x10 unit plane
+
+            // Create a 2D canvas for drawing
+            drawingCanvas = document.createElement('canvas');
+            drawingCanvas.width = 1024; // Resolution for the texture
+            drawingCanvas.height = 1024;
+            drawingContext = drawingCanvas.getContext('2d');
+            drawingContext.fillStyle = 'white';
+            drawingContext.fillRect(0, 0, drawingCanvas.width, drawingCanvas.height); // Fill with white initially
+
+            // Create a Three.js texture from the 2D canvas
+            planeTexture = new THREE.CanvasTexture(drawingCanvas);
+            planeTexture.needsUpdate = true; // Mark as needing update when drawing changes
+
+            // Create a material using the texture
+            planeMaterial = new THREE.MeshLambertMaterial({ map: planeTexture, side: THREE.DoubleSide });
+            planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
+            // Position it at z=0 to face the front
+            planeMesh.position.set(0, 0, 0);
+            scene.add(planeMesh);
+            // The plane is special, not added to objectsInScene for clearScene logic
+
+            // --- Load 3D Fonts ---
+            const fontLoader = new THREE.FontLoader();
+            fontLoader.load('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/fonts/helvetiker_regular.typeface.json', function (loadedFont) {
+                regularFont = loadedFont;
+                showMessageBox('Regular font loaded!', 1000);
+            }, undefined, function (error) {
+                console.error('An error occurred loading the regular font:', error);
+                showMessageBox('Error loading regular font. Text feature may be limited.', 3000);
+            });
+            fontLoader.load('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/fonts/helvetiker_bold.typeface.json', function (loadedFont) {
+                boldFont = loadedFont;
+                showMessageBox('Bold font loaded!', 1000);
+            }, undefined, function (error) {
+                console.error('An error occurred loading the bold font:', error);
+                showMessageBox('Error loading bold font. Bold text may not work.', 3000);
+            });
+
+
+            // Handle window resizing
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        /**
+         * Handles window resizing to update camera aspect ratio and renderer size.
+         */
+        function onWindowResize() {
+            const canvasContainer = document.getElementById('canvas-container');
+            camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            showMessageBox('Resized!', 500); // Quick feedback on resize
+        }
+
+        /**
+         * Animation loop for Three.js.
+         */
+        function animate() {
+            requestAnimationFrame(animate); // Request next frame
+            controls.update(); // Update OrbitControls
+            renderer.render(scene, camera); // Render the scene
+        }
+
+        // --- Drawing Logic (2D on Plane) ---
+
+        /**
+         * Converts mouse/touch coordinates to normalized device coordinates (-1 to +1).
+         * @param {Event} event - The mouse or touch event.
+         * @returns {THREE.Vector2} Normalized coordinates.
+         */
+        function getNormalizedCoordinates(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            let clientX, clientY;
+
+            if (event.touches && event.touches.length > 0) {
+                clientX = event.touches[0].clientX;
+                clientY = event.touches[0].clientY;
+            } else {
+                clientX = event.clientX;
+                clientY = event.clientY;
+            }
+
+            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+            return mouse;
+        }
+
+        /**
+         * Starts the drawing process on the 2D canvas.
+         * @param {Event} event - The mouse or touch event.
+         */
+        function startDrawing(event) {
+            if (currentTool !== 'brush') return;
+            isDrawing = true;
+            draw(event); // Draw a single point immediately
+            controls.enabled = false; // Disable orbit controls while drawing
+        }
+
+        /**
+         * Continues drawing on the 2D canvas.
+         * @param {Event} event - The mouse or touch event.
+         */
+        function draw(event) {
+            if (!isDrawing || currentTool !== 'brush') return;
+
+            // Update raycaster with current mouse position
+            raycaster.setFromCamera(getNormalizedCoordinates(event), camera);
+
+            // Find intersections with the drawing plane
+            const intersects = raycaster.intersectObject(planeMesh);
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+                // Get the UV coordinates on the plane (0 to 1)
+                const uv = intersect.uv; 
+
+                // Convert UV coordinates to pixel coordinates on the 2D drawing canvas
+                const x = uv.x * drawingCanvas.width;
+                const y = (1 - uv.y) * drawingCanvas.height; // Invert Y because UV.y is from bottom, canvas Y is from top
+
+                // Apply current brush color, thickness, and opacity
+                drawingContext.strokeStyle = hexToRgba(currentDrawingColor, currentBrushOpacity);
+                drawingContext.lineWidth = currentBrushThickness;
+                drawingContext.lineCap = 'round';
+                drawingContext.lineTo(x, y);
+                drawingContext.stroke();
+                drawingContext.beginPath(); // Start a new path for continuous drawing
+                drawingContext.moveTo(x, y);
+
+                // Update the Three.js texture
+                planeTexture.needsUpdate = true;
+            }
+        }
+
+        /**
+         * Stops the drawing process.
+         */
+        function stopDrawing() {
+            isDrawing = false;
+            drawingContext.beginPath(); // Reset path
+            controls.enabled = true; // Re-enable orbit controls
+        }
+
+        // --- Object Addition Logic ---
+
+        /**
+         * Adds a 3D object (cube or sphere) to the scene.
+         * @param {string} type - 'cube' or 'sphere'.
+         */
+        function addObject(type) {
+            let geometry;
+            // Create material with current drawing color and opacity
+            let material = new THREE.MeshLambertMaterial({
+                color: new THREE.Color(currentDrawingColor),
+                transparent: true, // Enable transparency for opacity to work
+                opacity: currentBrushOpacity
+            });
+            let mesh;
+
+            if (type === 'cube') {
+                geometry = new THREE.BoxGeometry(1, 1, 1); // 1x1x1 unit cube
+                mesh = new THREE.Mesh(geometry, material);
+                showMessageBox('Cube added!', 1000);
+            } else if (type === 'sphere') {
+                geometry = new THREE.SphereGeometry(0.7, 32, 32); // Radius 0.7, segments for smoothness
+                mesh = new THREE.Mesh(geometry, material);
+                showMessageBox('Sphere added!', 1000);
+            } else {
+                return;
+            }
+
+            // Position the new object slightly in front of the plane
+            mesh.position.set(0, 0, 0.5);
+            scene.add(mesh);
+            objectsInScene.push(mesh); // Add to tracking array
+            deselectObject(); // Deselect any currently selected object
+            pushCommand(new AddObjectCommand(mesh)); // Record command
+        }
+
+        /**
+         * Adds 3D text to the scene using TextGeometry.
+         * @param {string} text - The text string to add.
+         * @param {object} options - Options for text styling.
+         * @param {boolean} options.bold - Whether the text should be bold.
+         * @param {boolean} options.italic - Whether the text should be italic (visual skew).
+         * @param {boolean} options.underline - Whether the text should be underlined.
+         * @param {boolean} options.strike - Whether the text should be striked.
+         */
+        function add3DText(text, options = {}) {
+            if (!text.trim()) {
+                showMessageBox('Please enter some text!', 1500);
+                return;
+            }
+
+            let selectedFont = regularFont;
+            if (options.bold && boldFont) {
+                selectedFont = boldFont;
+            } else if (!regularFont) {
+                showMessageBox('Font not loaded yet. Please try again in a moment.', 2000);
+                return;
+            }
+
+            // Create 3D text geometry
+            const textGeometry = new THREE.TextGeometry(text, {
+                font: selectedFont,
+                size: 1, // Size of the text in 3D units
+                height: 0.2, // Depth of the text extrusion
+                curveSegments: 12,
+                bevelEnabled: false // For simplicity, no bevel
+            });
+            textGeometry.computeBoundingBox();
+            textGeometry.center(); // Center the text geometry
+
+            const textMaterial = new THREE.MeshLambertMaterial({
+                color: new THREE.Color(currentDrawingColor),
+                transparent: true,
+                opacity: currentBrushOpacity
+            });
+            const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+
+            // Apply visual italic skew if requested
+            if (options.italic) {
+                textMesh.rotation.y = Math.PI / 16; // Apply a slight skew for visual italic
+                textMesh.position.x -= 0.1; // Adjust position slightly due to skew
+            }
+
+            // Add underline if requested
+            if (options.underline) {
+                const textWidth = textMesh.geometry.boundingBox.max.x - textMesh.geometry.boundingBox.min.x;
+                const textHeight = textMesh.geometry.boundingBox.max.y - textMesh.geometry.boundingBox.min.y;
+
+                const underlineGeometry = new THREE.BoxGeometry(textWidth * 1.1, 0.05, 0.05); // Slightly wider than text
+                const underlineMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(currentDrawingColor) });
+                const underlineMesh = new THREE.Mesh(underlineGeometry, underlineMaterial);
+
+                // Position underline relative to textMesh
+                underlineMesh.position.set(0, -textHeight / 2 - 0.1, 0); // Below the text
+                textMesh.add(underlineMesh); // Add underline as a child of textMesh
+            }
+
+            // Add strike-through if requested
+            if (options.strike) {
+                const textWidth = textMesh.geometry.boundingBox.max.x - textMesh.geometry.boundingBox.min.x;
+                const textHeight = textMesh.geometry.boundingBox.max.y - textMesh.geometry.boundingBox.min.y;
+
+                const strikeGeometry = new THREE.BoxGeometry(textWidth * 1.1, 0.05, 0.05); // Slightly wider than text
+                const strikeMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(currentDrawingColor) });
+                const strikeMesh = new THREE.Mesh(strikeGeometry, strikeMaterial);
+
+                // Position strike-through line in the middle of the text
+                strikeMesh.position.set(0, 0, 0); // Centered vertically
+                textMesh.add(strikeMesh); // Add strike-through as a child of textMesh
+            }
+
+
+            // Position the text slightly in front of the drawing plane
+            textMesh.position.set(0, 0, 0.5);
+            scene.add(textMesh);
+            objectsInScene.push(textMesh); // Add to tracking array
+            deselectObject(); // Deselect any currently selected object
+            pushCommand(new AddObjectCommand(textMesh)); // Record command
+        }
+
+        /**
+         * Loads a GLB 3D model from a file input.
+         * @param {File} file - The GLB file to load.
+         */
+        function loadGLBModel(file) {
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                const contents = event.target.result;
+                const loader = new THREE.GLTFLoader();
+
+                loader.parse(contents, '', function (gltf) {
+                    const model = gltf.scene;
+                    // Scale the model to a reasonable size if it's too big/small
+                    // You might need to adjust this based on typical model sizes
+                    const box = new THREE.Box3().setFromObject(model);
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const desiredSize = 2; // Adjust as needed
+                    if (maxDim > 0) { // Avoid division by zero
+                        model.scale.multiplyScalar(desiredSize / maxDim);
+                    } else {
+                        model.scale.set(desiredSize, desiredSize, desiredSize); // Default scale if dimensions are zero
+                    }
+
+
+                    // Center the model
+                    box.setFromObject(model); // Recalculate bounding box after scaling
+                    box.getCenter(model.position).multiplyScalar(-1); // Move to origin
+                    model.position.z += 0.5; // Place slightly in front of the drawing plane
+
+                    scene.add(model);
+                    objectsInScene.push(model); // Add to tracking array
+                    deselectObject(); // Deselect any currently selected object
+                    pushCommand(new AddObjectCommand(model)); // Record command
+                    showMessageBox(`Model "${file.name}" loaded!`, 2000);
+                }, function (error) {
+                    console.error('Error loading GLB model:', error);
+                    showMessageBox(`Error loading model: ${error.message}`, 3000);
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        /**
+         * Selects a 3D object and attaches TransformControls to it.
+         * @param {THREE.Object3D} object - The object to select.
+         */
+        function selectObject(object) {
+            if (selectedObject) {
+                // Remove highlight from previous object if any
+                // (Future: Add a visual highlight, e.g., outline helper)
+            }
+            selectedObject = object;
+            transformControls.attach(selectedObject);
+            updatePropertiesPanel(selectedObject);
+            showMessageBox(`Object selected: ${object.uuid.substring(0, 8)}...`, 1000);
+        }
+
+        /**
+         * Deselects the current object and detaches TransformControls.
+         */
+        function deselectObject() {
+            if (selectedObject) {
+                // Remove highlight from current object
+                // (Future: Remove a visual highlight)
+                selectedObject = null;
+                transformControls.detach();
+                updatePropertiesPanel(null); // Clear properties panel
+                showMessageBox('Object deselected.', 800);
+            }
+        }
+
+        /**
+         * Clears all non-plane objects from the scene and resets the drawing canvas.
+         */
+        function clearScene() {
+            deselectObject(); // Deselect any active object before clearing
+
+            const objectsToClear = [];
+            // Create a copy of objectsInScene for the command, as objectsInScene will be modified
+            const currentObjects = [...objectsInScene];
+
+            for (let i = currentObjects.length - 1; i >= 0; i--) {
+                const object = currentObjects[i];
+                // Store object details for undo
+                objectsToClear.push({
+                    object: object,
+                    position: object.position.clone(),
+                    rotation: object.rotation.clone(),
+                    scale: object.scale.clone(),
+                    parent: object.parent // Store parent for re-adding
+                });
+            }
+            // Get current drawing state for undo
+            const oldDrawingDataURL = drawingCanvas.toDataURL();
+
+            // Push command before executing the clear operation
+            pushCommand(new ClearSceneCommand(objectsToClear.reverse(), oldDrawingDataURL));
+
+            // Execute the clear operation
+            for (const { object } of objectsToClear) {
+                scene.remove(object);
+                const index = objectsInScene.indexOf(object);
+                if (index > -1) objectsInScene.splice(index, 1);
+                // Dispose of geometries, materials, and textures to free up memory
+                object.traverse(child => {
+                    if (child.isMesh) {
+                        if (child.geometry) child.geometry.dispose();
+                        if (child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(material => material.dispose());
+                            } else {
+                                material.dispose();
+                            }
+                        }
+                    }
+                });
+            }
+            drawingContext.fillStyle = 'white';
+            drawingContext.fillRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            planeTexture.needsUpdate = true;
+            showMessageBox('Scene cleared!', 1500);
+        }
+
+        // --- Event Listeners and UI Logic ---
+
+        /**
+         * Sets the active tool and updates button styles.
+         * @param {string} toolName - The name of the tool to activate.
+         */
+        function setActiveTool(toolName) {
+            currentTool = toolName;
+            document.querySelectorAll('.tool-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            document.getElementById(toolName + 'Tool').classList.add('active');
+
+            // Manage TransformControls visibility based on tool
+            if (currentTool === 'select') {
+                transformControls.visible = true;
+                // Initially deselect when entering select mode
+                deselectObject();
+            } else {
+                transformControls.visible = false;
+                deselectObject(); // Deselect when switching away from select tool
+            }
+
+            showMessageBox(`${toolName} tool selected`, 800);
+        }
+
+        // Initialize Three.js and start animation loop when the window loads
+        window.onload = function () {
+            try {
+                console.log("Window loaded, initializing Three.js...");
+                initThreeJS();
+                animate();
+                setupPropertyListeners(); // Setup listeners for property inputs
+                updateUndoRedoButtons(); // Initialize button states
+                console.log("Three.js initialized and animation started.");
+
+                // Get UI elements
+                const brushThicknessSlider = document.getElementById('brushThickness');
+                const thicknessValueSpan = document.getElementById('thicknessValue');
+                const brushOpacitySlider = document.getElementById('brushOpacity');
+                const opacityValueSpan = document.getElementById('opacityValue');
+                const textModal = document.getElementById('textModal');
+                const textInput = document.getElementById('textInput');
+                const textBoldCheckbox = document.getElementById('textBold');
+                const textItalicCheckbox = document.getElementById('textItalic');
+                const textUnderlineCheckbox = document.getElementById('textUnderline');
+                const textStrikeCheckbox = document.getElementById('textStrike');
+                const addTextConfirmButton = document.getElementById('addTextConfirm');
+                const cancelTextButton = document.getElementById('cancelText');
+                const loadModelButton = document.getElementById('loadModel');
+                const modelFileInput = document.getElementById('modelFileInput');
+                const undoButton = document.getElementById('undoButton');
+                const redoButton = document.getElementById('redoButton');
+
+
+                // Event listeners for tool buttons
+                document.getElementById('brushTool').addEventListener('click', () => setActiveTool('brush'));
+                document.getElementById('addCube').addEventListener('click', () => addObject('cube'));
+                document.getElementById('addSphere').addEventListener('click', () => addObject('sphere'));
+                document.getElementById('addText').addEventListener('click', () => {
+                    textModal.classList.remove('hidden'); // Show the modal
+                    textInput.value = ''; // Clear previous input
+                    textBoldCheckbox.checked = false;
+                    textItalicCheckbox.checked = false;
+                    textUnderlineCheckbox.checked = false;
+                    textStrikeCheckbox.checked = false; // Ensure strike checkbox is reset
+                    textInput.focus();
+                });
+                document.getElementById('selectTool').addEventListener('click', () => setActiveTool('select'));
+                document.getElementById('clearCanvas').addEventListener('click', clearScene);
+                loadModelButton.addEventListener('click', () => {
+                    modelFileInput.click(); // Trigger the hidden file input
+                });
+                modelFileInput.addEventListener('change', (event) => {
+                    const file = event.target.files[0];
+                    if (file) {
+                        loadGLBModel(file);
+                    }
+                    event.target.value = ''; // Clear the input so same file can be selected again
+                });
+
+                // Undo/Redo button listeners
+                undoButton.addEventListener('click', executeUndo);
+                redoButton.addEventListener('click', executeRedo);
+
+
+                // Event listener for color picker
+                document.getElementById('colorPicker').addEventListener('input', (event) => {
+                    currentDrawingColor = event.target.value;
+                    showMessageBox(`Color changed to ${currentDrawingColor}`, 800);
+                });
+
+                // Event listener for brush thickness slider
+                brushThicknessSlider.addEventListener('input', (event) => {
+                    currentBrushThickness = parseInt(event.target.value);
+                    thicknessValueSpan.textContent = `${currentBrushThickness}px`;
+                    showMessageBox(`Brush thickness: ${currentBrushThickness}px`, 500);
+                });
+
+                // Event listener for brush opacity slider
+                brushOpacitySlider.addEventListener('input', (event) => {
+                    currentBrushOpacity = parseFloat(event.target.value) / 100; // Convert 0-100 to 0.0-1.0
+                    opacityValueSpan.textContent = `${event.target.value}%`;
+                    showMessageBox(`Brush opacity: ${event.target.value}%`, 500);
+                });
+
+                // Event listeners for text modal
+                addTextConfirmButton.addEventListener('click', () => {
+                    add3DText(textInput.value, {
+                        bold: textBoldCheckbox.checked,
+                        italic: textItalicCheckbox.checked,
+                        underline: textUnderlineCheckbox.checked,
+                        strike: textStrikeCheckbox.checked // Pass the strike option
+                    });
+                    textModal.classList.add('hidden'); // Hide the modal
+                });
+                cancelTextButton.addEventListener('click', () => {
+                    textModal.classList.add('hidden'); // Hide the modal
+                    showMessageBox('Text addition cancelled.', 1000);
+                });
+                textInput.addEventListener('keypress', (event) => {
+                    if (event.key === 'Enter') {
+                        addTextConfirmButton.click(); // Simulate click on Add Text button
+                    }
+                });
+
+
+                // Event listeners for drawing/selection on the Three.js canvas (mouse and touch)
+                const threeCanvas = document.getElementById('three-canvas');
+
+                threeCanvas.addEventListener('mousedown', (event) => {
+                    if (currentTool === 'brush') {
+                        startDrawing(event);
+                    } else if (currentTool === 'select') {
+                        // Handle object selection
+                        raycaster.setFromCamera(getNormalizedCoordinates(event), camera);
+                        const intersects = raycaster.intersectObjects(objectsInScene, true); // true for recursive check
+
+                        if (intersects.length > 0) {
+                            // Find the top-level object that was hit
+                            let hitObject = intersects[0].object;
+                            // Traverse up to find the main object if a child was hit (e.g., underline of text)
+                            while (hitObject && !objectsInScene.includes(hitObject)) {
+                                hitObject = hitObject.parent;
+                            }
+                            if (hitObject && hitObject !== selectedObject) {
+                                selectObject(hitObject);
+                            } else if (hitObject === selectedObject) {
+                                // Clicked on the same object, allow transform controls to handle drag
+                            } else {
+                                deselectObject();
+                            }
+                        } else {
+                            deselectObject(); // Clicked on empty space
+                        }
+                    }
+                });
+
+                threeCanvas.addEventListener('mousemove', (event) => {
+                    if (currentTool === 'brush') {
+                        draw(event);
+                    }
+                });
+
+                threeCanvas.addEventListener('mouseup', () => {
+                    if (currentTool === 'brush') {
+                        stopDrawing();
+                    }
+                });
+
+                threeCanvas.addEventListener('mouseleave', () => {
+                    if (currentTool === 'brush') {
+                        stopDrawing();
+                    }
+                });
+
+                // Touch events
+                threeCanvas.addEventListener('touchstart', (event) => {
+                    event.preventDefault(); // Prevent scrolling/zooming
+                    if (currentTool === 'brush') {
+                        startDrawing(event);
+                    } else if (currentTool === 'select') {
+                        raycaster.setFromCamera(getNormalizedCoordinates(event), camera);
+                        const intersects = raycaster.intersectObjects(objectsInScene, true);
+
+                        if (intersects.length > 0) {
+                            let hitObject = intersects[0].object;
+                            while (hitObject && !objectsInScene.includes(hitObject)) {
+                                hitObject = hitObject.parent;
+                            }
+                            if (hitObject && hitObject !== selectedObject) {
+                                selectObject(hitObject);
+                            } else if (hitObject === selectedObject) {
+                                // Allow transform controls to handle drag
+                            } else {
+                                deselectObject();
+                            }
+                        } else {
+                            deselectObject(); // Tapped on empty space
+                        }
+                    }
+                }, { passive: false });
+
+                threeCanvas.addEventListener('touchmove', (event) => {
+                    event.preventDefault(); // Prevent scrolling/zooming
+                    if (currentTool === 'brush') {
+                        draw(event);
+                    }
+                }, { passive: false });
+
+                threeCanvas.addEventListener('touchend', () => {
+                    if (currentTool === 'brush') {
+                        stopDrawing();
+                    }
+                });
+
+                // Initial tool selection
+                setActiveTool('brush');
+                showMessageBox('Welcome to Paint 3D Mobile! Now with Undo/Redo!', 3000);
+            } catch (error) {
+                console.error("An error occurred during Three.js initialization:", error);
+                showMessageBox(`Error: ${error.message}. Check console for details.`, 5000);
+            }
+        };
+    </script>
+</body>
+</html>
